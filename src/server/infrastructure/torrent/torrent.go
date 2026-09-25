@@ -337,40 +337,21 @@ func (s *Service) DownloadViaTorrent(platform, destDir, gameName string, entry m
 	s.App.Logf("TORRENT [%s]: aria2c downloading %s (%.0f MB) file-index=%d", gameName, entry.FileName, float64(fileSize)/1048576, fileIndex)
 	s.App.LogStatus(gameName, "Processing", fmt.Sprintf("Torrenting (Minerva): starting... (%.0f MB)", float64(fileSize)/1048576))
 
-	// Write torrent to a temp file so aria2c doesn't need to re-fetch it via HTTPS.
-	// (aria2c on Windows has SSL issues fetching HTTPS URLs; Go has none.)
+	// Stage torrent metadata and partial data in a deterministic per-game directory.
+	// This is intentional: if GODsend restarts, aria2c can continue the partial file.
 	if err := os.MkdirAll(s.App.TorrentTempDir, 0755); err != nil {
 		return "", fmt.Errorf("create torrent temp dir: %w", err)
 	}
-	tf, err := os.CreateTemp(s.App.TorrentTempDir, "godsend-*.torrent")
-	if err != nil {
-		return "", fmt.Errorf("create temp torrent: %w", err)
-	}
-	torrentFile := tf.Name()
-	defer os.Remove(torrentFile)
-	if _, err := tf.Write(torrentData); err != nil {
-		tf.Close()
-		return "", fmt.Errorf("write temp torrent: %w", err)
-	}
-	tf.Close()
-
-	// aria2c nests output under <torrent-name>/path/… so the full path can exceed
-	// Windows MAX_PATH (260 chars) when destDir + torrent subdirs + filename are combined.
-	// Stage under TorrentTempDir (configurable; default GODSEND_HOME/Temp/torrent-dl), then
-	// move the finished file to destDir afterwards.
-	aria2cDir, err := os.MkdirTemp(s.App.TorrentTempDir, "gd-dl-*")
-	if err != nil {
+	safeGame := helpers.SanitizeFilename(gameName)
+	if safeGame == "" { safeGame = "game" }
+	aria2cDir := filepath.Join(s.App.TorrentTempDir, "gd-dl-"+safeGame)
+	if err := os.MkdirAll(aria2cDir, 0755); err != nil {
 		return "", fmt.Errorf("create aria2c temp dir: %w", err)
 	}
-	defer os.RemoveAll(aria2cDir)
-
-	listen, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil { return "", fmt.Errorf("allocate aria2 RPC port: %w", err) }
-	rpcPort := listen.Addr().(*net.TCPAddr).Port
-	listen.Close()
-	s.registerControl(gameName, rpcPort)
-	defer s.unregisterControl(gameName)
-	sessionFile := filepath.Join(aria2cDir, "aria2.session")
+	torrentFile := filepath.Join(aria2cDir, "source.torrent")
+	if err := os.WriteFile(torrentFile, torrentData, 0644); err != nil {
+		return "", fmt.Errorf("write torrent: %w", err)
+	}
 
 	args := []string{
 		"--dir=" + aria2cDir,
@@ -509,6 +490,7 @@ func (s *Service) DownloadViaTorrent(platform, destDir, gameName string, entry m
 	if err := moveDownloadedFile(foundPath, destFile); err != nil {
 		return "", err
 	}
+	os.RemoveAll(aria2cDir)
 
 	s.App.Logf("TORRENT [%s]: Download complete (%.0f MB)", gameName, float64(fileSize)/1048576)
 	return destFile, nil
