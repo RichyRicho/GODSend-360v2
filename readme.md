@@ -1,4 +1,4 @@
-# GODsend 360
+# GODsend 360v2 - Allows torrent pausing, GOD to local folder instead of Xbox 360 having to be online at the time, FTP can be done later. 
 
 [![Discord](https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/d3sFnrgpJn)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/ghosty99)
