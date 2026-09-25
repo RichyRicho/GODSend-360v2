@@ -573,7 +573,14 @@ func (d *Deps) handleQueueResume(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 	if r.Method != stdhttp.MethodPost { jsonError(w, 405, "Use POST /queue/resume?game=GameName"); return }
 	game := local.NormalizeClientGameName(r.URL.Query().Get("game"))
 	if game == "" { jsonError(w, 400, "Missing game parameter"); return }
-	if err := d.Pipeline.Torrent.Resume(game); err != nil { jsonError(w, 409, err.Error()); return }
+	if err := d.Pipeline.Torrent.Resume(game); err != nil {
+		if err2 := d.Pipeline.ResumePersistedLocalGame(game); err2 != nil {
+			jsonError(w, 409, err.Error())
+			return
+		}
+		jsonSuccess(w, map[string]string{"status":"resumed","game":game})
+		return
+	}
 	jsonSuccess(w, map[string]string{"status":"resumed","game":game})
 }
 
