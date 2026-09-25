@@ -382,6 +382,7 @@ func (s *Service) DownloadViaTorrent(platform, destDir, gameName string, entry m
 		"--bt-max-peers=100",
 		"--follow-torrent=false", // torrent file is our input, don't re-fetch
 		"--file-allocation=none", // skip pre-allocation - avoids spurious ENOSPC on large files
+		"--continue=true",              // resume an existing partial file after restart
 		"--console-log-level=warn",
 		"--summary-interval=3", // print progress every 3 s
 		"--human-readable=true",
