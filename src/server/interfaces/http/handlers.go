@@ -561,6 +561,22 @@ func (d *Deps) handleQueue(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 }
 
 // handleQueueRemove clears one job or the whole queue (POST /queue/remove?game=name or no game = all).
+func (d *Deps) handleQueuePause(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+	if r.Method != stdhttp.MethodPost { jsonError(w, 405, "Use POST /queue/pause?game=GameName"); return }
+	game := local.NormalizeClientGameName(r.URL.Query().Get("game"))
+	if game == "" { jsonError(w, 400, "Missing game parameter"); return }
+	if err := d.Pipeline.Torrent.Pause(game); err != nil { jsonError(w, 409, err.Error()); return }
+	jsonSuccess(w, map[string]string{"status":"paused","game":game})
+}
+
+func (d *Deps) handleQueueResume(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+	if r.Method != stdhttp.MethodPost { jsonError(w, 405, "Use POST /queue/resume?game=GameName"); return }
+	game := local.NormalizeClientGameName(r.URL.Query().Get("game"))
+	if game == "" { jsonError(w, 400, "Missing game parameter"); return }
+	if err := d.Pipeline.Torrent.Resume(game); err != nil { jsonError(w, 409, err.Error()); return }
+	jsonSuccess(w, map[string]string{"status":"resumed","game":game})
+}
+
 func (d *Deps) handleQueueRemove(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 	if r.Method != stdhttp.MethodPost && r.Method != stdhttp.MethodGet {
 		jsonError(w, 405, "Use GET or POST /queue/remove?game=GameName (omit game to clear all)")
