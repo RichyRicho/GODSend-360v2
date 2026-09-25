@@ -288,6 +288,7 @@ func (d *Deps) handleTrigger(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 	gameName := local.NormalizeClientGameName(r.URL.Query().Get("game"))
 	platform := r.URL.Query().Get("platform")
 	source := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("source"))) // "minerva", "ia", or ""
+	localOutput := r.URL.Query().Get("local") == "1" || strings.EqualFold(r.URL.Query().Get("local"), "true")
 	if gameName == "" {
 		jsonError(w, 400, "Missing game parameter")
 		return
@@ -313,6 +314,10 @@ func (d *Deps) handleTrigger(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 		}
 		if gs.State == "Processing" {
 			jsonSuccess(w, map[string]string{"status": "already_processing"})
+			return
+		}
+		if gs.State == "Paused" {
+			jsonSuccess(w, map[string]string{"status": "already_paused"})
 			return
 		}
 	}
@@ -379,6 +384,12 @@ func (d *Deps) handleTrigger(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 	if source != "ia" {
 		if _, hasMinervaPage := app.MinervaPageURLs[platform]; hasMinervaPage {
 			if mEntry, ok := d.Minerva.FindEntry(gameName, platform); ok {
+				if localOutput && (platform == "xbox360" || platform == "xbox" || platform == "games") {
+					d.App.Logf("TRIGGER: Minerva local GOD source for '%s' (%s)", gameName, platform)
+					launcher(func() { d.Pipeline.ProcessMinervaLocalGame(gameName, mEntry, platform) })
+					jsonSuccess(w, map[string]string{"status": "triggered", "source": "minerva", "mode": "local"})
+					return
+				}
 				d.App.Logf("TRIGGER: Minerva source for '%s' (%s)", gameName, platform)
 				switch platform {
 				case "digital", "xbla", "dlc", "xblig":
@@ -554,6 +565,29 @@ func (d *Deps) handleQueue(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 }
 
 // handleQueueRemove clears one job or the whole queue (POST /queue/remove?game=name or no game = all).
+func (d *Deps) handleQueuePause(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+	if r.Method != stdhttp.MethodPost { jsonError(w, 405, "Use POST /queue/pause?game=GameName"); return }
+	game := local.NormalizeClientGameName(r.URL.Query().Get("game"))
+	if game == "" { jsonError(w, 400, "Missing game parameter"); return }
+	if err := d.Pipeline.Torrent.Pause(game); err != nil { jsonError(w, 409, err.Error()); return }
+	jsonSuccess(w, map[string]string{"status":"paused","game":game})
+}
+
+func (d *Deps) handleQueueResume(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+	if r.Method != stdhttp.MethodPost { jsonError(w, 405, "Use POST /queue/resume?game=GameName"); return }
+	game := local.NormalizeClientGameName(r.URL.Query().Get("game"))
+	if game == "" { jsonError(w, 400, "Missing game parameter"); return }
+	if err := d.Pipeline.Torrent.Resume(game); err != nil {
+		if err2 := d.Pipeline.ResumePersistedLocalGame(game); err2 != nil {
+			jsonError(w, 409, err.Error())
+			return
+		}
+		jsonSuccess(w, map[string]string{"status":"resumed","game":game})
+		return
+	}
+	jsonSuccess(w, map[string]string{"status":"resumed","game":game})
+}
+
 func (d *Deps) handleQueueRemove(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 	if r.Method != stdhttp.MethodPost && r.Method != stdhttp.MethodGet {
 		jsonError(w, 405, "Use GET or POST /queue/remove?game=GameName (omit game to clear all)")

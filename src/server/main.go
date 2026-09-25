@@ -138,6 +138,9 @@ func main() {
 	}
 	mux := deps.NewRouter()
 
+	// ── Resume local torrent/GOD jobs from previous sessions ─────────
+	go pipelineSvc.ResumePersistedLocalGames()
+
 	// ── Resume pending FTP jobs from previous sessions ──────────────
 	go func() {
 		for _, job := range ftpSvc.LoadAllPendingFTPJobs() {

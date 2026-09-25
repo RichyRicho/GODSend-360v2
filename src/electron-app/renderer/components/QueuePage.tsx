@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { RefreshCw, Loader2, X, Upload, HardDrive } from "lucide-react";
+import { RefreshCw, Loader2, X, Upload, HardDrive, Pause, Play } from "lucide-react";
 import { Button } from "./ui/button";
 import { cn } from "../lib/utils";
 
@@ -31,6 +31,7 @@ function stateColor(state: string) {
   if (state === "Error")       return "text-red-400";
   if (state === "Pending FTP") return "text-yellow-400";
   if (state === "Queued")      return "text-yellow-400";
+  if (state === "Paused")      return "text-orange-400";
   if (state === "Processing")  return "text-blue-400";
   return "text-muted-foreground";
 }
@@ -40,6 +41,7 @@ function stateIcon(state: string) {
   if (state === "Error")       return "!!";
   if (state === "Pending FTP") return "..";
   if (state === "Queued")      return "..";
+  if (state === "Paused")      return "||";
   if (state === "Processing")  return ">>";
   return "?";
 }
@@ -59,10 +61,12 @@ function sourceIcon(source: "pipeline" | "ftp") {
 interface JobRowProps {
   job: UnifiedJob;
   onRemove: (job: UnifiedJob) => void;
+  onPause: (job: UnifiedJob) => void;
+  onResume: (job: UnifiedJob) => void;
   removing: boolean;
 }
 
-function JobRow({ job, onRemove, removing }: JobRowProps) {
+function JobRow({ job, onRemove, onPause, onResume, removing }: JobRowProps) {
   const pct = job.progress;
   const isFinished = job.state === "Ready" || job.state === "Error";
 
@@ -100,6 +104,17 @@ function JobRow({ job, onRemove, removing }: JobRowProps) {
           </div>
         )}
       </div>
+      {job.source === "pipeline" && (job.state === "Processing" || job.state === "Paused") && (
+        <Button
+          size="icon"
+          className="shrink-0 h-6 w-6"
+          title={job.state === "Paused" ? "Resume torrent" : "Pause torrent"}
+          disabled={removing}
+          onClick={() => job.state === "Paused" ? onResume(job) : onPause(job)}
+        >
+          {job.state === "Paused" ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
+        </Button>
+      )}
       <Button
         size="icon"
         className="shrink-0 h-6 w-6"
@@ -180,6 +195,16 @@ export default function QueuePage() {
     return () => clearInterval(id);
   }, [fetchAll]);
 
+  async function handlePause(job: UnifiedJob) {
+    await window.godsendApi.pauseQueue(job.name);
+    await fetchAll();
+  }
+
+  async function handleResume(job: UnifiedJob) {
+    await window.godsendApi.resumeQueue(job.name);
+    await fetchAll();
+  }
+
   async function handleRemove(job: UnifiedJob) {
     setRemoving((prev) => ({ ...prev, [job.key]: true }));
     try {
@@ -241,6 +266,8 @@ export default function QueuePage() {
                 key={job.key}
                 job={job}
                 onRemove={handleRemove}
+                onPause={handlePause}
+                onResume={handleResume}
                 removing={!!removing[job.key]}
               />
             ))}

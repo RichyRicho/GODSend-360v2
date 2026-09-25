@@ -40,32 +40,24 @@ export function register(ipcMain: IpcMain): void {
 
   // ── Queue a game (register → trigger on Go backend) ───────────────────────
   ipcMain.handle("browse:queue-game", async (_event, { game, platform, source, drive, installType }) => {
-    const xboxIp = getConfiguredXboxIP();
-    if (!xboxIp) return { ok: false, error: "No Xbox IP configured. Check Settings → Xbox connection." };
-
     const enc  = encodeURIComponent(game);
-    const drv  = encodeURIComponent(drive || "Hdd1:");
     const inst = encodeURIComponent(installType || "god");
     const plat = encodeURIComponent(platform || "xbox360");
     const src  = source ? `&source=${encodeURIComponent(source)}` : "";
 
     try {
-      const regData = await backendGet(
-        `/register?game=${enc}&ip=${encodeURIComponent(xboxIp)}&drive=${drv}&platform=${plat}&mode=ftp&install_type=${inst}`
-      );
-      let reg: any;
-      try { reg = JSON.parse(regData); } catch { reg = {}; }
-      if (reg.error) return { ok: false, error: `Register: ${reg.error}` };
+      // Local download mode is deliberately independent of Xbox/FTP settings.
+      if (source === "minerva") {
+        const trigData = await backendGet(
+          `/trigger?game=${enc}&platform=${plat}&install_type=${inst}&local=1${src}`
+        );
+        let trig: any;
+        try { trig = JSON.parse(trigData); } catch { trig = {}; }
+        if (trig.error) return { ok: false, error: `Trigger: ${trig.error}` };
+        return { ok: true, status: trig.status || "triggered" };
+      }
 
-      const trigData = await backendGet(
-        `/trigger?game=${enc}&platform=${plat}&install_type=${inst}${src}`
-      );
-      let trig: any;
-      try { trig = JSON.parse(trigData); } catch { trig = {}; }
-      if (trig.error) return { ok: false, error: `Trigger: ${trig.error}` };
-
-      const status = trig.status || "triggered";
-      return { ok: true, status };
+      return { ok: false, error: "Local GOD downloads currently require the Minerva source." };
     } catch (err: any) {
       return { ok: false, error: err.message };
     }
@@ -214,4 +206,21 @@ export function register(ipcMain: IpcMain): void {
       req.setTimeout(5000, () => { req.destroy(); resolve({ ok: false }); });
     });
   });
+
+  async function queueAction(path: string, game: string) {
+    const port = getConfiguredServerPort();
+    const enc = encodeURIComponent(game);
+    return new Promise((resolve) => {
+      const req = http.request(`http://localhost:${port}${path}?game=${enc}`, { method: "POST" }, (res) => {
+        let data = "";
+        res.on("data", (chunk) => { data += chunk; });
+        res.on("end", () => resolve({ ok: res.statusCode === 200, data }));
+      });
+      req.on("error", (err: Error) => resolve({ ok: false, error: err.message }));
+      req.setTimeout(5000, () => { req.destroy(); resolve({ ok: false }); });
+      req.end();
+    });
+  }
+  ipcMain.handle("queue:pause", (_event, game: string) => queueAction("/queue/pause", game));
+  ipcMain.handle("queue:resume", (_event, game: string) => queueAction("/queue/resume", game));
 }

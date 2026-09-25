@@ -60,6 +60,7 @@ export default function SettingsPage({ onAppendLine }: SettingsPageProps) {
   const [defaultStoragePath, setDefaultStoragePath] = useState("");
   const [backendTempPath, setBackendTempPath]   = useState("");
   const [torrentTempPath, setTorrentTempPath]   = useState("");
+  const [godOutputPath, setGodOutputPath]       = useState("");
   const [defaultTorrentTempPath, setDefaultTorrentTempPath] = useState("");
   const [appDataDir, setAppDataDir]             = useState("");
   const [defaultAppDataDir, setDefaultAppDataDir] = useState("");
@@ -154,6 +155,7 @@ export default function SettingsPage({ onAppendLine }: SettingsPageProps) {
       setDefaultStoragePath((await window.godsendApi.getDefaultStoragePath()) || "");
       setBackendTempPath((await window.godsendApi.getEffectiveBackendTempPath()) || "");
       setTorrentTempPath((await window.godsendApi.getEffectiveTorrentTempPath()) || "");
+      setGodOutputPath((await window.godsendApi.getEffectiveGodOutputPath()) || "");
       setDefaultTorrentTempPath((await window.godsendApi.getDefaultTorrentTempPath()) || "");
       setAppDataDir((await window.godsendApi.getAppDataDir()) || "");
       setDefaultAppDataDir((await window.godsendApi.getDefaultAppDataDir()) || "");
@@ -246,6 +248,20 @@ export default function SettingsPage({ onAppendLine }: SettingsPageProps) {
     setTorrentTempPath((await window.godsendApi.getEffectiveTorrentTempPath()) || "");
     setDefaultTorrentTempPath((await window.godsendApi.getDefaultTorrentTempPath()) || "");
     onAppendLine("[INFO] Storage path reset to default; backend restarted.");
+  }
+
+  async function handleGodOutputBrowse() {
+    const picked = await window.godsendApi.chooseGodOutputPath();
+    if (!picked) return;
+    await window.godsendApi.setGodOutputPath(picked);
+    setGodOutputPath((await window.godsendApi.getEffectiveGodOutputPath()) || "");
+    onAppendLine(`[INFO] Local GOD output changed to ${picked}; backend restarted.`);
+  }
+
+  async function handleGodOutputReset() {
+    await window.godsendApi.setGodOutputPath("");
+    setGodOutputPath((await window.godsendApi.getEffectiveGodOutputPath()) || "");
+    onAppendLine("[INFO] Local GOD output reset to default.");
   }
 
   async function handleTorrentTempBrowse() {
@@ -819,6 +835,21 @@ export default function SettingsPage({ onAppendLine }: SettingsPageProps) {
               <code className="mx-1">Transfer/</code> (local ISO drop folder unless overridden
               below), and <code className="mx-1">cache/</code> (Minerva / IA title lists).
               Override to put large files on another drive without moving logs and settings.
+            </Hint>
+          </Section>
+
+          {/* ── Local GOD output ── */}
+          <Section title="Local GOD output">
+            <div className="flex flex-wrap gap-2 items-center">
+              <Input type="text" readOnly className="flex-1 min-w-[180px]"
+                value={godOutputPath} placeholder="Default: GOD folder under local storage" />
+              <Button onClick={handleGodOutputBrowse}>Browse&hellip;</Button>
+              <Button onClick={handleGodOutputReset}>Use default</Button>
+            </div>
+            <Hint>
+              Minerva local downloads are converted automatically and saved as
+              <code className="mx-1">&lt;Game Name&gt;\&lt;TitleID&gt;\00007000\...</code>.
+              No Xbox connection or FTP transfer is required.
             </Hint>
           </Section>
 

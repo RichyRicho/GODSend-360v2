@@ -17,6 +17,8 @@ import {
 import {
   getConfiguredStoragePath,
   getConfiguredTorrentTempPath,
+  getConfiguredGodOutputPath,
+  getDefaultGodOutputPath,
   getDefaultTorrentTempPath,
   getEffectiveTorrentTempPath,
   getConfiguredTransferFolder,
@@ -91,6 +93,29 @@ export function register(ipcMain: IpcMain): void {
   ipcMain.handle("config:choose-storage-path", async () => {
     const win = BrowserWindow.getFocusedWindow() || getMainWindow();
     const r   = await dialog.showOpenDialog(win || undefined, {
+      properties: ["openDirectory", "createDirectory"],
+    });
+    if (r.canceled || !r.filePaths[0]) return null;
+    return r.filePaths[0];
+  });
+
+  // ── Local GOD output ───────────────────────────────────────────────────────
+  ipcMain.handle("config:get-god-output-path", () => getConfiguredGodOutputPath());
+  ipcMain.handle("config:get-effective-god-output-path", () => {
+    const custom = getConfiguredGodOutputPath();
+    return custom ? path.resolve(custom) : getDefaultGodOutputPath(getWritableRuntimeRoot());
+  });
+  ipcMain.handle("config:set-god-output-path", (_event, folder) => {
+    const f = typeof folder === "string" ? folder.trim() : "";
+    writeConfig({ godOutputPath: f });
+    appendAppEvent("CONFIG", `godOutputPath=${f || "(default GOD folder)"}; restarting backend`);
+    restartGodsendIfRunning();
+    return getConfiguredGodOutputPath();
+  });
+  ipcMain.handle("config:choose-god-output-path", async () => {
+    const win = BrowserWindow.getFocusedWindow() || getMainWindow();
+    const r = await dialog.showOpenDialog(win || undefined, {
+      title: "Choose local GOD output folder",
       properties: ["openDirectory", "createDirectory"],
     });
     if (r.canceled || !r.filePaths[0]) return null;

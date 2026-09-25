@@ -19,6 +19,7 @@ type App struct {
 	ToolsDir         string
 	GodsendExeDir    string // directory containing the godsend binary
 	TorrentTempDir   string // aria2c Minerva download staging (default ToolsDir/Temp/torrent-dl)
+	GODOutputDir     string // local completed GOD library root
 	TransferDir      string // local ISO folder
 	SaveBackupDir    string // save-game backup folder
 	PendingFTPDir    string
@@ -100,9 +101,9 @@ func NewApp() *App {
 		MinervaEntryMap:      make(map[string]models.MinervaEntry),
 		MinervaBuildStates:   make(map[string]*models.BuildState),
 		MinervaCacheBuilding: make(map[string]bool),
-		ROMGameCache:         make(map[string][]string),
-		ROMURLMap:            make(map[string]string),
-		EdgeEmuHTTPClient:    &http.Client{Timeout: 0},
+		ROMGameCache:          make(map[string][]string),
+		ROMURLMap:             make(map[string]string),
+		EdgeEmuHTTPClient:     &http.Client{Timeout: 0},
 	}
 }
 

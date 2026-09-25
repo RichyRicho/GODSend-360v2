@@ -287,6 +287,14 @@ func (a *App) SetupPaths() error {
 		}
 	}
 	a.TorrentTempDir = filepath.Join(a.ToolsDir, "Temp", "torrent-dl")
+	a.GODOutputDir = filepath.Join(a.ToolsDir, "GOD")
+	if v := strings.TrimSpace(os.Getenv("GODSEND_GOD_OUTPUT")); v != "" {
+		abs, err := filepath.Abs(v)
+		if err != nil { return fmt.Errorf("GODSEND_GOD_OUTPUT: %w", err) }
+		a.GODOutputDir = abs
+		a.Logf("[INFO] Local GOD output (GODSEND_GOD_OUTPUT): %s", a.GODOutputDir)
+	}
+	if err := os.MkdirAll(a.GODOutputDir, 0755); err != nil { return fmt.Errorf("GOD output dir: %w", err) }
 	if v := strings.TrimSpace(os.Getenv("GODSEND_TORRENT_TEMP")); v != "" {
 		abs, err := filepath.Abs(v)
 		if err != nil {
