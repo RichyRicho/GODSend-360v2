@@ -612,6 +612,15 @@ func (s *Service) ExecutePendingFTPJob(job PendingFTPJob) error {
 }
 
 // RetryFTPJobForever retries a pending FTP job indefinitely until it succeeds or is cancelled.
+func (s *Service) hasLocalTorrentJob(gameName string) bool {
+	safe := helpers.SanitizeFilename(gameName)
+	if safe == "" {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(s.App.TorrentTempDir, "local-jobs", safe+".json"))
+	return err == nil
+}
+
 func (s *Service) RetryFTPJobForever(job PendingFTPJob) {
 	backoff := 30 * time.Second
 	const maxBackoff = 5 * time.Minute
@@ -620,6 +629,14 @@ func (s *Service) RetryFTPJobForever(job PendingFTPJob) {
 
 	for {
 		time.Sleep(backoff)
+
+		// A local Minerva/GOD job owns this game. Never let an older persisted
+		// FTP retry compete with it or overwrite its queue status.
+		if s.hasLocalTorrentJob(job.GameName) {
+			s.App.Logf("FTP PENDING: %s - local torrent job is active; cancelling stale FTP retry", job.GameName)
+			s.DeletePendingFTPJob(job.ID)
+			return
+		}
 
 		if _, suppressed := s.App.SuppressedJobs.Load(job.GameName); suppressed {
 			s.App.Logf("FTP PENDING: %s - cancelled, removing", job.GameName)
