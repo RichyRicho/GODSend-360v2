@@ -1,4 +1,5 @@
 name: Windows Test Build
+# Debug completion build refresh 2026-09-25
 # CI trigger: 2026-09-25T17:44:23.112Z
 
 on:
