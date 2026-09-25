@@ -2,6 +2,7 @@
 package pipeline
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +13,46 @@ import (
 	"godsend/models"
 	"godsend/utils"
 )
+
+type localTorrentJob struct {
+	GameName string `json:"game_name"`
+	Platform string `json:"platform"`
+	Entry models.MinervaEntry `json:"entry"`
+}
+
+func (s *Service) localTorrentJobPath(gameName string) string {
+	safe := helpers.SanitizeFilename(gameName)
+	return filepath.Join(s.App.TorrentTempDir, "local-jobs", safe+".json")
+}
+
+func (s *Service) saveLocalTorrentJob(gameName, platform string, entry models.MinervaEntry) error {
+	dir := filepath.Join(s.App.TorrentTempDir, "local-jobs")
+	if err := os.MkdirAll(dir, 0755); err != nil { return err }
+	b, err := json.MarshalIndent(localTorrentJob{GameName:gameName, Platform:platform, Entry:entry}, "", "  ")
+	if err != nil { return err }
+	return os.WriteFile(s.localTorrentJobPath(gameName), b, 0644)
+}
+
+func (s *Service) removeLocalTorrentJob(gameName string) {
+	_ = os.Remove(s.localTorrentJobPath(gameName))
+}
+
+// ResumePersistedLocalGames resumes local Minerva jobs that were active when GODsend stopped.
+func (s *Service) ResumePersistedLocalGames() {
+	dir := filepath.Join(s.App.TorrentTempDir, "local-jobs")
+	entries, err := os.ReadDir(dir)
+	if err != nil { return }
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".json" { continue }
+		b, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil { continue }
+		var job localTorrentJob
+		if json.Unmarshal(b, &job) != nil || job.GameName == "" || job.Entry.FileName == "" { continue }
+		s.App.Logf("TORRENT PENDING: Resuming local GOD download for %s", job.GameName)
+		s.App.LogStatus(job.GameName, "Queued", "Resuming previous torrent...")
+		go s.ProcessMinervaLocalGame(job.GameName, job.Entry, job.Platform)
+	}
+}
 
 // ProcessMinervaLocalGame converts a Minerva disc release to a local GOD tree.
 // It never consults the Xbox connection and never schedules FTP.
@@ -40,6 +81,10 @@ func (s *Service) ProcessMinervaLocalGame(gameName string, entry models.MinervaE
 	}
 	defer os.RemoveAll(torrentDir)
 
+	if err := s.saveLocalTorrentJob(gameName, platform, entry); err != nil {
+		s.App.LogStatus(gameName, "Error", fmt.Sprintf("Persist torrent job: %v", err))
+		return
+	}
 	s.App.Logf("=== Minerva Local GOD: %s (%s) ===", gameName, platform)
 	s.App.LogStatus(gameName, "Processing", "Starting Minerva torrent download...")
 	archivePath, err := s.Torrent.DownloadViaTorrent(platform, torrentDir, gameName, entry, s.debridTorrentDownloader(gameName))
@@ -73,6 +118,7 @@ func (s *Service) ProcessMinervaLocalGame(gameName string, entry models.MinervaE
 			return
 		}
 		s.App.Logf("Local GOD complete: TitleID=%s MediaID=%s", titleID, mediaID)
+		s.removeLocalTorrentJob(gameName)
 		s.App.LogStatus(gameName, "Ready", "GOD ready")
 		s.App.Logf("=== Complete (Minerva Local GOD): %s ===", gameName)
 		return
@@ -88,6 +134,7 @@ func (s *Service) ProcessMinervaLocalGame(gameName string, entry models.MinervaE
 			return
 		}
 		s.App.Logf("Local GOD reused: TitleID=%s MediaID=%s", titleID, mediaID)
+		s.removeLocalTorrentJob(gameName)
 		s.App.LogStatus(gameName, "Ready", "GOD ready")
 		s.App.Logf("=== Complete (Minerva Local GOD existing): %s ===", gameName)
 		return
