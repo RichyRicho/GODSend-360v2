@@ -29,6 +29,7 @@ import (
 func (d *Deps) handleBrowse(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 	platform := r.URL.Query().Get("platform")
 	source := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("source"))) // "minerva", "ia", or "" (merged)
+	localOutput := r.URL.Query().Get("local") == "1" || strings.EqualFold(r.URL.Query().Get("local"), "true")
 	d.App.Logf("BROWSE: platform=%s source=%s", platform, source)
 
 	// ROM platforms - served from edgeemu.net scrape cache
@@ -379,6 +380,12 @@ func (d *Deps) handleTrigger(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 	if source != "ia" {
 		if _, hasMinervaPage := app.MinervaPageURLs[platform]; hasMinervaPage {
 			if mEntry, ok := d.Minerva.FindEntry(gameName, platform); ok {
+				if localOutput && (platform == "xbox360" || platform == "xbox" || platform == "games") {
+					d.App.Logf("TRIGGER: Minerva local GOD source for '%s' (%s)", gameName, platform)
+					launcher(func() { d.Pipeline.ProcessMinervaLocalGame(gameName, mEntry, platform) })
+					jsonSuccess(w, map[string]string{"status": "triggered", "source": "minerva", "mode": "local"})
+					return
+				}
 				d.App.Logf("TRIGGER: Minerva source for '%s' (%s)", gameName, platform)
 				switch platform {
 				case "digital", "xbla", "dlc", "xblig":
