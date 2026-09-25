@@ -81,14 +81,28 @@ func (s *Service) aria2RPC(game, method string) error {
 	return nil
 }
 
+func (s *Service) pausedMarker(game string) string {
+	safe := helpers.SanitizeFilename(game)
+	if safe == "" { safe = "game" }
+	return filepath.Join(s.App.TorrentTempDir, "local-jobs", safe+".paused")
+}
+
+func (s *Service) IsPaused(game string) bool {
+	_, err := os.Stat(s.pausedMarker(game))
+	return err == nil
+}
+
 func (s *Service) Pause(game string) error {
 	if err := s.aria2RPC(game, "aria2.pauseAll"); err != nil { return err }
+	_ = os.MkdirAll(filepath.Dir(s.pausedMarker(game)), 0755)
+	_ = os.WriteFile(s.pausedMarker(game), []byte("paused\n"), 0644)
 	s.App.LogStatus(game, "Paused", "Torrent paused")
 	return nil
 }
 
 func (s *Service) Resume(game string) error {
 	if err := s.aria2RPC(game, "aria2.unpauseAll"); err != nil { return err }
+	_ = os.Remove(s.pausedMarker(game))
 	s.App.LogStatus(game, "Processing", "Torrent resumed")
 	return nil
 }
