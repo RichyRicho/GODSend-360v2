@@ -111,28 +111,41 @@ func (s *Service) ProcessMinervaLocalGame(gameName string, entry models.MinervaE
 		return
 	}
 	s.App.Logf("=== Minerva Local GOD: %s (%s) ===", gameName, platform)
+	s.App.Logf("LOCAL GOD [%s]: [DEBUG] outputRoot=%s gameDir=%s torrentDir=%s entry=%q", gameName, outputRoot, gameDir, torrentDir, entry.FileName)
 	s.App.LogStatus(gameName, "Processing", "Starting Minerva torrent download...")
+	s.App.Logf("LOCAL GOD [%s]: [DEBUG] calling DownloadViaTorrent...", gameName)
 	archivePath, err := s.Torrent.DownloadViaTorrent(platform, torrentDir, gameName, entry, s.debridTorrentDownloader(gameName))
 	if err != nil {
+		s.App.Logf("LOCAL GOD [%s]: [DEBUG] DownloadViaTorrent failed: %v", gameName, err)
 		s.App.LogStatus(gameName, "Error", fmt.Sprintf("Minerva torrent: %v", err))
 		return
+	}
+	s.App.Logf("LOCAL GOD [%s]: [DEBUG] torrent returned archive=%s", gameName, archivePath)
+	if st, statErr := os.Stat(archivePath); statErr == nil {
+		s.App.Logf("LOCAL GOD [%s]: [DEBUG] archive size=%d bytes", gameName, st.Size())
+	} else {
+		s.App.Logf("LOCAL GOD [%s]: [DEBUG] archive stat failed: %v", gameName, statErr)
 	}
 
 	extDir := filepath.Join(s.App.ToolsDir, "Temp", safeName+"_local_ext")
 	os.RemoveAll(extDir)
 	defer os.RemoveAll(extDir)
 	s.App.LogStatus(gameName, "Processing", "Extracting archive...")
+	s.App.Logf("LOCAL GOD [%s]: [DEBUG] extracting %s -> %s", gameName, archivePath, extDir)
 
 	if err := utils.ExtractArchive(archivePath, extDir); err != nil {
 		s.App.LogStatus(gameName, "Error", fmt.Sprintf("Extract: %v", err))
 		return
 	}
+	s.App.Logf("LOCAL GOD [%s]: [DEBUG] archive extraction completed", gameName)
 
 	// Minerva Redump is normally an archive containing one ISO. Convert it
 	// directly into <output>/<game>/<TitleID>/00007000/... .
 	isoPath := findFileByExt(extDir, ".iso")
+	s.App.Logf("LOCAL GOD [%s]: [DEBUG] ISO search result=%q", gameName, isoPath)
 	if isoPath != "" {
 		s.App.LogStatus(gameName, "Processing", "Converting ISO to GOD...")
+		s.App.Logf("LOCAL GOD [%s]: [DEBUG] RunIso2GodNative input=%s output=%s", gameName, isoPath, gameDir)
 		if err := utils.RunIso2GodNative(isoPath, gameDir, Iso2GodResolveDisplayTitle); err != nil {
 			s.App.LogStatus(gameName, "Error", fmt.Sprintf("GOD convert: %v", err))
 			return
@@ -142,6 +155,7 @@ func (s *Service) ProcessMinervaLocalGame(gameName string, entry models.MinervaE
 			s.App.LogStatus(gameName, "Error", fmt.Sprintf("GOD detect: %v", err))
 			return
 		}
+		s.App.Logf("LOCAL GOD [%s]: [DEBUG] DetectGodStructure TitleID=%s MediaID=%s", gameName, titleID, mediaID)
 		s.App.Logf("Local GOD complete: TitleID=%s MediaID=%s", titleID, mediaID)
 		s.removeLocalTorrentJob(gameName)
 		s.App.LogStatus(gameName, "Ready", "GOD ready")
@@ -152,6 +166,7 @@ func (s *Service) ProcessMinervaLocalGame(gameName string, entry models.MinervaE
 	// Some Minerva releases are already GOD/MGOD. Preserve the existing GOD
 	// structure beneath the game-name folder rather than reconverting it.
 	titleID, mediaID, srcRoot, err := findGODRoot(extDir)
+	s.App.Logf("LOCAL GOD [%s]: [DEBUG] existing GOD search titleID=%s mediaID=%s root=%q err=%v", gameName, titleID, mediaID, srcRoot, err)
 	if err == nil {
 		os.RemoveAll(gameDir)
 		if err := copyTree(srcRoot, gameDir); err != nil {
