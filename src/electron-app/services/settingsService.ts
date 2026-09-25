@@ -7,6 +7,7 @@ export interface GodsendConfig {
   appDataDir?: string;
   storagePath?: string;
   torrentTempPath?: string;
+  godOutputPath?: string;
   transferFolder?: string;
   saveBackupFolder?: string;
   profileLabels?: Record<string, string>;
@@ -58,9 +59,18 @@ export function getConfiguredStoragePath(): string {
   return typeof v === "string" ? v.trim() : "";
 }
 
+export function getConfiguredGodOutputPath(): string {
+  const v = readConfig().godOutputPath;
+  return typeof v === "string" ? v.trim() : "";
+}
+
 export function getConfiguredTorrentTempPath(): string {
   const v = readConfig().torrentTempPath;
   return typeof v === "string" ? v.trim() : "";
+}
+
+export function getDefaultGodOutputPath(writableRoot: string): string {
+  return path.join(writableRoot, "GOD");
 }
 
 export function getDefaultTorrentTempPath(writableRoot: string): string {
@@ -190,6 +200,8 @@ export function getConfiguredCustomXexPath(): string {
 
 export function buildGodsendEnv(writableRoot: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, GODSEND_HOME: writableRoot };
+  const godOutput = getConfiguredGodOutputPath();
+  if (godOutput) env.GODSEND_GOD_OUTPUT = path.resolve(godOutput);
   const torrentTemp = getConfiguredTorrentTempPath();
   if (torrentTemp) env.GODSEND_TORRENT_TEMP = path.resolve(torrentTemp);
   const custom = getConfiguredTransferFolder();
