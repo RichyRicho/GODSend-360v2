@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/anacrolix/torrent/metainfo"
@@ -415,6 +416,9 @@ func (s *Service) DownloadViaTorrent(platform, destDir, gameName string, entry m
 	if err := cmd.Start(); err != nil {
 		return "", fmt.Errorf("aria2c start: %w", err)
 	}
+	s.App.Logf("TORRENT [%s]: [DEBUG] aria2c started pid=%d rpc=127.0.0.1:%d staging=%s", gameName, cmd.Process.Pid, rpcPort, aria2cDir)
+	s.App.Logf("TORRENT [%s]: [DEBUG] selected file=%q index=%d expected=%.0f MB", gameName, selectedBase, fileIndex, float64(fileSize)/1048576)
+	s.App.Logf("TORRENT [%s]: [DEBUG] aria2 args=%q", gameName, args)
 
 	// aria2c summary lines look like:
 	//   [#abc123 195MiB/6504MiB(3%) CN:67 DL:9.9MiB ETA:31m]
@@ -436,6 +440,7 @@ func (s *Service) DownloadViaTorrent(platform, destDir, gameName string, entry m
 	}
 
 	doneCh := make(chan struct{})
+	var downloadComplete atomic.Bool
 	go func() {
 		defer close(doneCh)
 		sc := bufio.NewScanner(stdout)
@@ -460,6 +465,19 @@ func (s *Service) DownloadViaTorrent(platform, destDir, gameName string, entry m
 			if line == "" {
 				continue
 			}
+			// aria2 reports a completed torrent as SEED(...). With --seed-time=0
+			// it should exit itself, but some aria2 builds remain in the SEED state.
+			// Treat SEED as authoritative completion and force aria2 to shut down so
+			// GODsend can continue immediately to extraction/conversion.
+			if strings.Contains(line, "SEED(") {
+				downloadComplete.Store(true)
+				s.App.Logf("TORRENT [%s]: [DEBUG] aria2 reports SEED - download is complete; requesting force shutdown", gameName)
+				if err := s.aria2RPC(gameName, "aria2.forceShutdown"); err != nil {
+					s.App.Logf("TORRENT [%s]: [DEBUG] aria2 forceShutdown failed: %v", gameName, err)
+				} else {
+					s.App.Logf("TORRENT [%s]: [DEBUG] aria2 forceShutdown accepted", gameName)
+				}
+			}
 			if m := summaryRe.FindStringSubmatch(line); m != nil {
 				pct, dl, eta := m[3], m[4], m[5]
 				msg := fmt.Sprintf("Torrenting (Minerva): %s%% @ %s/s ETA %s", pct, dl, eta)
@@ -475,7 +493,8 @@ func (s *Service) DownloadViaTorrent(platform, destDir, gameName string, entry m
 
 	waitErr := cmd.Wait()
 	<-doneCh // ensure pipe is fully drained before proceeding
-	if waitErr != nil {
+	s.App.Logf("TORRENT [%s]: [DEBUG] aria2 process exited; completed=%t exitErr=%v", gameName, downloadComplete.Load(), waitErr)
+	if waitErr != nil && !downloadComplete.Load() {
 		tailMu.Lock()
 		tail := strings.Join(tailBuf, " | ")
 		tailMu.Unlock()
@@ -486,6 +505,7 @@ func (s *Service) DownloadViaTorrent(platform, destDir, gameName string, entry m
 	}
 
 	// Walk the short temp dir to find the downloaded file.
+	s.App.Logf("TORRENT [%s]: [DEBUG] scanning completed staging directory: %s", gameName, aria2cDir)
 	var foundPath string
 	_ = filepath.Walk(aria2cDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
@@ -501,8 +521,15 @@ func (s *Service) DownloadViaTorrent(platform, destDir, gameName string, entry m
 		return nil
 	})
 	if foundPath == "" {
+		var files []string
+		_ = filepath.Walk(aria2cDir, func(path string, info os.FileInfo, err error) error {
+			if err == nil && info != nil && !info.IsDir() { files = append(files, path) }
+			return nil
+		})
+		s.App.Logf("TORRENT [%s]: [DEBUG] expected file not found; files present=%q", gameName, files)
 		return "", fmt.Errorf("aria2c finished but %q not found under %s", entry.FileName, aria2cDir)
 	}
+	s.App.Logf("TORRENT [%s]: [DEBUG] completed file found: %s", gameName, foundPath)
 
 	// Move the file to destDir (caller manages destDir lifetime).
 	if err := os.MkdirAll(destDir, 0755); err != nil {
@@ -512,6 +539,7 @@ func (s *Service) DownloadViaTorrent(platform, destDir, gameName string, entry m
 	if err := moveDownloadedFile(foundPath, destFile); err != nil {
 		return "", err
 	}
+	s.App.Logf("TORRENT [%s]: [DEBUG] moved completed archive to %s", gameName, destFile)
 	os.RemoveAll(aria2cDir)
 
 	s.App.Logf("TORRENT [%s]: Download complete (%.0f MB)", gameName, float64(fileSize)/1048576)
