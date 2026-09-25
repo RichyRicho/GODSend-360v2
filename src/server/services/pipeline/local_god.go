@@ -10,7 +10,6 @@ import (
 
 	"godsend/infrastructure/helpers"
 	"godsend/models"
-	"godsend/services"
 	"godsend/utils"
 )
 
@@ -61,7 +60,7 @@ func (s *Service) ProcessMinervaLocalGame(gameName string, entry models.MinervaE
 
 	// Minerva Redump is normally an archive containing one ISO. Convert it
 	// directly into <output>/<game>/<TitleID>/00007000/... .
-	isoPath := helpers.FindFileByExt(extDir, ".iso")
+	isoPath := findFileByExt(extDir, ".iso")
 	if isoPath != "" {
 		s.App.LogStatus(gameName, "Processing", "Converting ISO to GOD...")
 		if err := utils.RunIso2GodNative(isoPath, gameDir, Iso2GodResolveDisplayTitle); err != nil {
@@ -97,6 +96,25 @@ func (s *Service) ProcessMinervaLocalGame(gameName string, entry models.MinervaE
 	s.App.LogStatus(gameName, "Error", "No ISO or valid GOD structure found in Minerva archive")
 }
 
+
+func findFileByExt(root, ext string) string {
+	var found string
+	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info == nil || info.IsDir() { return nil }
+		if strings.EqualFold(filepath.Ext(path), ext) { found = path; return filepath.SkipAll }
+		return nil
+	})
+	return found
+}
+
+func isHexString(s string) bool {
+	if len(s) == 0 { return false }
+	for _, r := range s {
+		if !(r >= '0' && r <= '9') && !(r >= 'a' && r <= 'f') && !(r >= 'A' && r <= 'F') { return false }
+	}
+	return true
+}
+
 // findGODRoot locates the directory whose immediate children contain
 // <TitleID>/<ContentType> with a non-DATA metadata file.
 func findGODRoot(root string) (string, string, string, error) {
@@ -110,7 +128,7 @@ func findGODRoot(root string) (string, string, string, error) {
 			return nil
 		}
 		for _, titleEntry := range entries {
-			if !titleEntry.IsDir() || len(titleEntry.Name()) != 8 || !helpers.IsHexString(titleEntry.Name()) {
+			if !titleEntry.IsDir() || len(titleEntry.Name()) != 8 || !isHexString(titleEntry.Name()) {
 				continue
 			}
 			titlePath := filepath.Join(path, titleEntry.Name())
@@ -119,7 +137,7 @@ func findGODRoot(root string) (string, string, string, error) {
 				continue
 			}
 			for _, ct := range cts {
-				if !ct.IsDir() || len(ct.Name()) != 8 || !helpers.IsHexString(ct.Name()) {
+				if !ct.IsDir() || len(ct.Name()) != 8 || !isHexString(ct.Name()) {
 					continue
 				}
 				ctPath := filepath.Join(titlePath, ct.Name())
@@ -182,6 +200,3 @@ func (s *Service) ResolveLocalGameFolder(gameName string) string {
 	return filepath.Join(s.App.GODOutputDir, safe)
 }
 
-// Keep services imported in builds where this file is split from the main pipeline.
-var _ = services.LookupTitleName
-var _ = models.MinervaEntry{}
