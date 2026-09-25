@@ -97,6 +97,15 @@ func (s *Service) ProcessMinervaLocalGame(gameName string, entry models.MinervaE
 	}
 	defer os.RemoveAll(torrentDir)
 
+	// A previous normal pipeline may have left a persisted FTP retry for this
+	// same game. Local Minerva owns the job now, so remove those stale entries.
+	for _, ftpJob := range s.FTP.LoadAllPendingFTPJobs() {
+		if ftpJob.GameName == gameName {
+			s.FTP.DeletePendingFTPJob(ftpJob.ID)
+			s.App.Logf("LOCAL GOD: removed stale FTP retry for %s", gameName)
+		}
+	}
+
 	if err := s.saveLocalTorrentJob(gameName, platform, entry); err != nil {
 		s.App.LogStatus(gameName, "Error", fmt.Sprintf("Persist torrent job: %v", err))
 		return
