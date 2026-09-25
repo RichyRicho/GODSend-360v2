@@ -31,6 +31,7 @@ function stateColor(state: string) {
   if (state === "Error")       return "text-red-400";
   if (state === "Pending FTP") return "text-yellow-400";
   if (state === "Queued")      return "text-yellow-400";
+  if (state === "Paused")      return "text-orange-400";
   if (state === "Processing")  return "text-blue-400";
   return "text-muted-foreground";
 }
@@ -40,6 +41,7 @@ function stateIcon(state: string) {
   if (state === "Error")       return "!!";
   if (state === "Pending FTP") return "..";
   if (state === "Queued")      return "..";
+  if (state === "Paused")      return "||";
   if (state === "Processing")  return ">>";
   return "?";
 }
