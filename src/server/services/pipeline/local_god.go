@@ -48,10 +48,26 @@ func (s *Service) ResumePersistedLocalGames() {
 		if err != nil { continue }
 		var job localTorrentJob
 		if json.Unmarshal(b, &job) != nil || job.GameName == "" || job.Entry.FileName == "" { continue }
-		s.App.Logf("TORRENT PENDING: Resuming local GOD download for %s", job.GameName)
+		s.App.Logf("TORRENT PENDING: Found local GOD download for %s", job.GameName)
+		if s.Torrent.IsPaused(job.GameName) {
+			s.App.LogStatus(job.GameName, "Paused", "Paused from previous session")
+			continue
+		}
 		s.App.LogStatus(job.GameName, "Queued", "Resuming previous torrent...")
 		go s.ProcessMinervaLocalGame(job.GameName, job.Entry, job.Platform)
 	}
+}
+
+// ResumePersistedLocalGame starts one persisted local download, used by the Queue Resume button after a backend restart.
+func (s *Service) ResumePersistedLocalGame(gameName string) error {
+	path := s.localTorrentJobPath(gameName)
+	b, err := os.ReadFile(path)
+	if err != nil { return fmt.Errorf("no persisted local torrent for %q", gameName) }
+	var job localTorrentJob
+	if err := json.Unmarshal(b, &job); err != nil { return fmt.Errorf("read persisted torrent: %w", err) }
+	_ = os.Remove(filepath.Join(s.App.TorrentTempDir, "local-jobs", helpers.SanitizeFilename(gameName)+".paused"))
+	go s.ProcessMinervaLocalGame(job.GameName, job.Entry, job.Platform)
+	return nil
 }
 
 // ProcessMinervaLocalGame converts a Minerva disc release to a local GOD tree.
