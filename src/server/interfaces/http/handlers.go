@@ -289,6 +289,7 @@ func (d *Deps) handleTrigger(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 	gameName := local.NormalizeClientGameName(r.URL.Query().Get("game"))
 	platform := r.URL.Query().Get("platform")
 	source := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("source"))) // "minerva", "ia", or ""
+	localOutput := r.URL.Query().Get("local") == "1" || strings.EqualFold(r.URL.Query().Get("local"), "true")
 	if gameName == "" {
 		jsonError(w, 400, "Missing game parameter")
 		return
