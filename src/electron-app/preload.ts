@@ -74,6 +74,8 @@ contextBridge.exposeInMainWorld("godsendApi", {
   exportAuroraDb:           () => ipcRenderer.invoke("xbox:export-aurora-db"),
   getQueue:                 () => ipcRenderer.invoke("xbox:get-queue"),
   removeFromQueue:          (game: string) => ipcRenderer.invoke("xbox:remove-queue-item", game),
+  pauseQueue:               (game: string) => ipcRenderer.invoke("queue:pause", game),
+  resumeQueue:              (game: string) => ipcRenderer.invoke("queue:resume", game),
   getDataStatus:            () => ipcRenderer.invoke("data:status"),
   clearLocalData:           () => ipcRenderer.invoke("data:clear"),
   getAria2ListenPort:       () => ipcRenderer.invoke("config:get-aria2-listen-port"),
