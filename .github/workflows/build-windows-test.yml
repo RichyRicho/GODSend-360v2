@@ -1,4 +1,5 @@
 name: Windows Test Build
+# CI trigger: 2026-09-25T13:12:20.462Z
 
 on:
   workflow_dispatch:
@@ -49,3 +50,4 @@ jobs:
             dist/*.blockmap
           if-no-files-found: error
           retention-days: 14
+
