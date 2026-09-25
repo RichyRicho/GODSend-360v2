@@ -7,7 +7,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,6 +28,10 @@ import (
 )
 
 // Service provides torrent-based download capabilities via aria2c.
+type torrentControl struct {
+	port int
+}
+
 type Service struct {
 	App *app.App
 
@@ -36,9 +42,57 @@ type Service struct {
 	// aria2c resolved path cache (mutex-guarded, local to this service)
 	aria2cResolvedMu   sync.Mutex
 	aria2cResolvedPath string
+	controlMu sync.RWMutex
+	controls map[string]torrentControl
 }
 
 // FetchMinervaTorrent downloads the collection .torrent file for the given platform from Minerva.
+func (s *Service) registerControl(game string, port int) {
+	s.controlMu.Lock()
+	defer s.controlMu.Unlock()
+	if s.controls == nil { s.controls = make(map[string]torrentControl) }
+	s.controls[game] = torrentControl{port: port}
+}
+
+func (s *Service) unregisterControl(game string) {
+	s.controlMu.Lock()
+	defer s.controlMu.Unlock()
+	delete(s.controls, game)
+}
+
+func (s *Service) controlPort(game string) (int, bool) {
+	s.controlMu.RLock()
+	defer s.controlMu.RUnlock()
+	c, ok := s.controls[game]
+	return c.port, ok
+}
+
+func (s *Service) aria2RPC(game, method string) error {
+	port, ok := s.controlPort(game)
+	if !ok { return fmt.Errorf("no active torrent for %q", game) }
+	body, _ := json.Marshal(map[string]interface{}{"jsonrpc":"2.0","id":"godsend","method":method,"params":[]interface{}{}})
+	resp, err := (&http.Client{Timeout: 5 * time.Second}).Post(fmt.Sprintf("http://127.0.0.1:%d/jsonrpc", port), "application/json", bytes.NewReader(body))
+	if err != nil { return fmt.Errorf("aria2 RPC %s: %w", method, err) }
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK { return fmt.Errorf("aria2 RPC %s HTTP %d", method, resp.StatusCode) }
+	var out struct { Error *struct { Code int `json:"code"`; Message string `json:"message"` } `json:"error"` }
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil { return err }
+	if out.Error != nil { return fmt.Errorf("aria2 RPC %s: %s", method, out.Error.Message) }
+	return nil
+}
+
+func (s *Service) Pause(game string) error {
+	if err := s.aria2RPC(game, "aria2.pauseAll"); err != nil { return err }
+	s.App.LogStatus(game, "Paused", "Torrent paused")
+	return nil
+}
+
+func (s *Service) Resume(game string) error {
+	if err := s.aria2RPC(game, "aria2.unpauseAll"); err != nil { return err }
+	s.App.LogStatus(game, "Processing", "Torrent resumed")
+	return nil
+}
+
 func (s *Service) FetchMinervaTorrent(platform string) ([]byte, error) {
 	torrentURL, ok := app.MinervaTorrentURLs[platform]
 	if !ok {
@@ -310,6 +364,14 @@ func (s *Service) DownloadViaTorrent(platform, destDir, gameName string, entry m
 	}
 	defer os.RemoveAll(aria2cDir)
 
+	listen, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil { return "", fmt.Errorf("allocate aria2 RPC port: %w", err) }
+	rpcPort := listen.Addr().(*net.TCPAddr).Port
+	listen.Close()
+	s.registerControl(gameName, rpcPort)
+	defer s.unregisterControl(gameName)
+	sessionFile := filepath.Join(aria2cDir, "aria2.session")
+
 	args := []string{
 		"--dir=" + aria2cDir,
 		"--select-file=" + strconv.Itoa(fileIndex),
@@ -321,6 +383,11 @@ func (s *Service) DownloadViaTorrent(platform, destDir, gameName string, entry m
 		"--console-log-level=warn",
 		"--summary-interval=3", // print progress every 3 s
 		"--human-readable=true",
+		"--enable-rpc=true",
+		"--rpc-listen-all=false",
+		"--rpc-listen-port="+strconv.Itoa(rpcPort),
+		"--save-session="+sessionFile,
+		"--save-session-interval=5",
 		torrentFile,
 	}
 	if s.App.Aria2ListenPort != "" {
