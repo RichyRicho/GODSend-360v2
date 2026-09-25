@@ -316,6 +316,10 @@ func (d *Deps) handleTrigger(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 			jsonSuccess(w, map[string]string{"status": "already_processing"})
 			return
 		}
+		if gs.State == "Paused" {
+			jsonSuccess(w, map[string]string{"status": "already_paused"})
+			return
+		}
 	}
 
 	launcher := func(fn func()) {
