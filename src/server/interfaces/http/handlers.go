@@ -29,7 +29,6 @@ import (
 func (d *Deps) handleBrowse(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 	platform := r.URL.Query().Get("platform")
 	source := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("source"))) // "minerva", "ia", or "" (merged)
-	localOutput := r.URL.Query().Get("local") == "1" || strings.EqualFold(r.URL.Query().Get("local"), "true")
 	d.App.Logf("BROWSE: platform=%s source=%s", platform, source)
 
 	// ROM platforms - served from edgeemu.net scrape cache
