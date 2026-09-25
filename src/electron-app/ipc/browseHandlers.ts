@@ -206,4 +206,21 @@ export function register(ipcMain: IpcMain): void {
       req.setTimeout(5000, () => { req.destroy(); resolve({ ok: false }); });
     });
   });
+
+  async function queueAction(path: string, game: string) {
+    const port = getConfiguredServerPort();
+    const enc = encodeURIComponent(game);
+    return new Promise((resolve) => {
+      const req = http.request(`http://localhost:${port}${path}?game=${enc}`, { method: "POST" }, (res) => {
+        let data = "";
+        res.on("data", (chunk) => { data += chunk; });
+        res.on("end", () => resolve({ ok: res.statusCode === 200, data }));
+      });
+      req.on("error", (err: Error) => resolve({ ok: false, error: err.message }));
+      req.setTimeout(5000, () => { req.destroy(); resolve({ ok: false }); });
+      req.end();
+    });
+  }
+  ipcMain.handle("queue:pause", (_event, game: string) => queueAction("/queue/pause", game));
+  ipcMain.handle("queue:resume", (_event, game: string) => queueAction("/queue/resume", game));
 }
