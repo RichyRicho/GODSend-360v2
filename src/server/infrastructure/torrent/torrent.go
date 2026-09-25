@@ -348,6 +348,13 @@ func (s *Service) DownloadViaTorrent(platform, destDir, gameName string, entry m
 	if err := os.MkdirAll(aria2cDir, 0755); err != nil {
 		return "", fmt.Errorf("create aria2c temp dir: %w", err)
 	}
+	listen, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil { return "", fmt.Errorf("allocate aria2 RPC port: %w", err) }
+	rpcPort := listen.Addr().(*net.TCPAddr).Port
+	listen.Close()
+	s.registerControl(gameName, rpcPort)
+	defer s.unregisterControl(gameName)
+	sessionFile := filepath.Join(aria2cDir, "aria2.session")
 	torrentFile := filepath.Join(aria2cDir, "source.torrent")
 	if err := os.WriteFile(torrentFile, torrentData, 0644); err != nil {
 		return "", fmt.Errorf("write torrent: %w", err)
