@@ -188,8 +188,8 @@ function QueueDialog({
           </div>
         </div>
 
-        {/* Drive selector */}
-        {!queued && (
+        {/* Xbox drive is not needed for local Minerva downloads. */}
+        {source !== "minerva" && !queued && (
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
               Destination drive
@@ -223,8 +223,8 @@ function QueueDialog({
           </div>
         )}
 
-        {/* Install method (GOD / Content / XEX) - only for applicable platforms */}
-        {hasMethods && !queued && (
+        {/* Install method - local Minerva disc downloads always produce GOD. */}
+        {hasMethods && source !== "minerva" && !queued && (
           <div className="flex flex-col gap-1">
             <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
               Install method
