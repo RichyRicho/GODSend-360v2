@@ -30,6 +30,10 @@ jobs:
         shell: powershell
         run: npm ci
 
+      - name: Install Electron dependencies
+        shell: powershell
+        run: npm install --prefix src/electron-app
+
       - name: Build Windows installer
         shell: powershell
         run: npm run build:win
