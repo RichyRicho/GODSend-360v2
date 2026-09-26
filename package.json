@@ -4,7 +4,6 @@
   "private": true,
   "description": "GODsend - Go backend + Electron desktop app",
   "scripts": {
-    "postinstall": "node scripts/install-electron-deps.js",
     "build:server": "node scripts/download-aria2.js && node scripts/download-fat32format.js && node scripts/build-server-win.js",
     "download:fat32format": "node scripts/download-fat32format.js",
     "build:server:mac": "mkdir -p dist && GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -C src/server -o ../../dist/godsend-mac . && node scripts/verify-go-binaries.js darwin-amd64",
@@ -25,7 +24,8 @@
     "build:mac": "npm run build:server:mac && npm run build:electron:mac",
     "build:mac:arm": "npm run build:server:mac:arm && npm run build:electron:mac:arm",
     "build:linux": "npm run build:server:linux && npm run build:electron:linux",
-    "start": "npm start --prefix src/electron-app"
+    "start": "npm start --prefix src/electron-app",
+    "install:electron": "npm install --prefix src/electron-app"
   },
   "engines": {
     "node": ">=18"
