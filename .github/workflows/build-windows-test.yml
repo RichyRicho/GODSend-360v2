@@ -2,6 +2,9 @@ name: Windows Test Build
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - local-download-god-pipeline
 
 jobs:
   build:
