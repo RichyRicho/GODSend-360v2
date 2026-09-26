@@ -203,9 +203,20 @@ func RunIso2GodNative(isoPath, outDir string, resolveDisplayTitle func(titleID u
 	if err != nil {
 		return fmt.Errorf("iso2god: stat ISO: %w", err)
 	}
-	dataSize := fi.Size() - int64(partOff)
+	// Trim unused padding at the end of the ISO. Xbox 360 retail images are
+	// normally padded to the full DVD layer size (~7.3 GB), but the actual game
+	// filesystem often ends much earlier. GOD only needs the used prefix of the
+	// game partition. This matches iso2god-rs --trim behavior.
+	maxUsedEnd, err := findMaxUsedGameEnd(f, partOff, rootSector, rootSize)
+	if err != nil {
+		return fmt.Errorf("iso2god: determine used game size: %w", err)
+	}
+	dataSize := int64(maxUsedEnd)
 	if dataSize <= 0 {
 		return fmt.Errorf("iso2god: no game data after partition offset")
+	}
+	if int64(partOff)+dataSize > fi.Size() {
+		return fmt.Errorf("iso2god: calculated game end exceeds ISO size")
 	}
 	blockCount := uint64((dataSize + godBlockSz - 1) / godBlockSz)
 	partCount := (blockCount + godBlocksPerPart - 1) / godBlocksPerPart
@@ -336,6 +347,54 @@ func parseDirSector(data []byte) []xdvdfsDirEntry {
 		pos = (after + 3) &^ 3 // 4-byte align
 	}
 	return entries
+}
+
+// findMaxUsedGameEnd returns the byte offset, relative to the start of the
+// XDVDFS game partition, of the last filesystem data in the ISO. Retail Xbox
+// 360 images are padded to the physical disc size; trimming here removes only
+// the unused tail while retaining the complete filesystem and its directory
+// tables.
+func findMaxUsedGameEnd(f *os.File, partOff uint64, rootSector, rootSize uint32) (uint64, error) {
+	// Keep the volume descriptor itself inside the GOD data.
+	maxEnd := uint64(0x21) * xdvdfsSectorSz
+
+	rootEnd := uint64(rootSector)*xdvdfsSectorSz + uint64(rootSize)
+	if rootEnd > maxEnd {
+		maxEnd = rootEnd
+	}
+
+	visited := make(map[[2]uint32]bool)
+	var walk func(uint32, uint32) error
+	walk = func(sector, size uint32) error {
+		key := [2]uint32{sector, size}
+		if visited[key] {
+			return nil
+		}
+		visited[key] = true
+
+		end := uint64(sector)*xdvdfsSectorSz + uint64(size)
+		if end > maxEnd {
+			maxEnd = end
+		}
+
+		for _, e := range readXDVDFSDirTable(f, partOff, sector, size) {
+			eEnd := uint64(e.sector)*xdvdfsSectorSz + uint64(e.size)
+			if eEnd > maxEnd {
+				maxEnd = eEnd
+			}
+			if e.isDir() {
+				if err := walk(e.sector, e.size); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+
+	if err := walk(rootSector, rootSize); err != nil {
+		return 0, err
+	}
+	return maxEnd, nil
 }
 
 // findInDir returns the sector / size of the first entry with the given name
