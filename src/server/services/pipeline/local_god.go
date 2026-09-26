@@ -144,6 +144,25 @@ func (s *Service) ProcessMinervaLocalGame(gameName string, entry models.MinervaE
 	isoPath := findFileByExt(extDir, ".iso")
 	s.App.Logf("LOCAL GOD [%s]: [DEBUG] ISO search result=%q", gameName, isoPath)
 	if isoPath != "" {
+		// Keep the extracted ISO instead of deleting it with the temporary
+		// extraction directory. Store it alongside the GOD library under ISOs.
+		isoKeepDir := filepath.Join(outputRoot, "ISOs")
+		if err := os.MkdirAll(isoKeepDir, 0755); err != nil {
+			s.App.LogStatus(gameName, "Error", fmt.Sprintf("Create ISO output: %v", err))
+			return
+		}
+		keptISO := filepath.Join(isoKeepDir, safeName+".iso")
+		_ = os.Remove(keptISO)
+		if err := os.Rename(isoPath, keptISO); err != nil {
+			if err := helpers.CopyFileBuffered(isoPath, keptISO); err != nil {
+				s.App.LogStatus(gameName, "Error", fmt.Sprintf("Keep ISO: %v", err))
+				return
+			}
+			_ = os.Remove(isoPath)
+		}
+		isoPath = keptISO
+		s.App.Logf("LOCAL GOD [%s]: kept source ISO at %s", gameName, isoPath)
+
 		s.App.LogStatus(gameName, "Processing", "Converting ISO to GOD...")
 		s.App.Logf("LOCAL GOD [%s]: [DEBUG] RunIso2GodNative input=%s output=%s", gameName, isoPath, gameDir)
 		if err := utils.RunIso2GodNative(isoPath, gameDir, Iso2GodResolveDisplayTitle); err != nil {
