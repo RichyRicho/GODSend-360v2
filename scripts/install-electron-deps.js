@@ -5,16 +5,12 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const electronDir = path.join(root, "src", "electron-app");
-const npmExecPath = process.env.npm_execpath;
 
-if (!npmExecPath) {
-  console.error("[install-electron-deps] npm_execpath is not set");
-  process.exit(1);
-}
+const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 
-console.log("[install-electron-deps] Installing Electron dependencies using the invoking npm CLI");
+console.log("[install-electron-deps] Installing Electron dependencies");
 
-const result = spawnSync(process.execPath, [npmExecPath, "install", "--prefix", electronDir], {
+const result = spawnSync(npmCommand, ["install", "--prefix", electronDir], {
   cwd: root,
   stdio: "inherit",
   env: process.env,
