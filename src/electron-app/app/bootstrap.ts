@@ -52,6 +52,7 @@ import {
   restartGodsendIfRunning,
   onFTPComplete,
   addOutputLine,
+  pauseAllTorrents,
 } from "../services/backendClient";
 import { autoUploadAuroraAssets, doAuroraLibrarySync } from "../services/autoSyncService";
 import { createMainWindow, setIsQuitting, getMainWindow } from "./window";
@@ -120,6 +121,14 @@ export function bootstrapApp(): void {
 
     createMainWindow();
     createTray(getMainWindow()!, {
+      onPauseAllTorrents: async () => {
+        try {
+          await pauseAllTorrents();
+          addOutputLine("[INFO] Pause All Torrents requested from system tray.");
+        } catch (err: any) {
+          addOutputLine(`[WARN] Pause All Torrents failed: ${err?.message || err}`);
+        }
+      },
       onQuit: () => {
         setIsQuitting(true);
         app.quit();
