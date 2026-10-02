@@ -23,6 +23,7 @@ func (d *Deps) NewRouter() *stdhttp.ServeMux {
 	mux.HandleFunc("/queue", d.wrap(d.handleQueue))
 	mux.HandleFunc("/queue/remove", d.wrap(d.handleQueueRemove))
 	mux.HandleFunc("/queue/pause", d.wrap(d.handleQueuePause))
+	mux.HandleFunc("/queue/pause-all", d.wrap(d.handleQueuePauseAll))
 	mux.HandleFunc("/queue/resume", d.wrap(d.handleQueueResume))
 	mux.HandleFunc("/debug", d.wrap(d.handleDebug))
 	mux.HandleFunc("/register", d.wrap(d.handleRegister))
