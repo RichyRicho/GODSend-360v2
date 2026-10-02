@@ -573,6 +573,22 @@ func (d *Deps) handleQueuePause(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 	jsonSuccess(w, map[string]string{"status":"paused","game":game})
 }
 
+func (d *Deps) handleQueuePauseAll(w stdhttp.ResponseWriter, r *stdhttp.Request) {
+	if r.Method != stdhttp.MethodPost {
+		jsonError(w, 405, "Use POST /queue/pause-all")
+		return
+	}
+	paused, err := d.Pipeline.Torrent.PauseAllTorrents()
+	if err != nil {
+		jsonError(w, 409, fmt.Sprintf("paused %d torrent(s), but one or more failed: %v", paused, err))
+		return
+	}
+	jsonSuccess(w, map[string]string{
+		"status": "paused",
+		"count":  strconv.Itoa(paused),
+	})
+}
+
 func (d *Deps) handleQueueResume(w stdhttp.ResponseWriter, r *stdhttp.Request) {
 	if r.Method != stdhttp.MethodPost { jsonError(w, 405, "Use POST /queue/resume?game=GameName"); return }
 	game := local.NormalizeClientGameName(r.URL.Query().Get("game"))
