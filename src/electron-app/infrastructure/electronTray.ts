@@ -7,7 +7,10 @@ export interface TrayOptions {
   onQuit: () => void;
 }
 
-export function createTray(mainWindow: BrowserWindow, { onQuit }: TrayOptions): Tray {
+export function createTray(
+  mainWindow: BrowserWindow,
+  { onPauseAllTorrents, onQuit }: TrayOptions,
+): Tray {
   let trayIcon = nativeImage.createEmpty();
   for (const iconPath of getIconCandidates()) {
     if (!fs.existsSync(iconPath)) continue;
