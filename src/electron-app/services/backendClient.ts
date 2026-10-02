@@ -219,6 +219,19 @@ export function startGodsend(): void {
   });
 }
 
+export async function pauseAllTorrents(): Promise<void> {
+	const port = getConfiguredServerPort();
+	const res = await fetch(`http://127.0.0.1:${port}/queue/pause-all`, { method: "POST" });
+	if (!res.ok) {
+		let message = `HTTP ${res.status}`;
+		try {
+			const body = await res.json();
+			if (body?.error) message = body.error;
+		} catch { /* keep HTTP status */ }
+		throw new Error(message);
+	}
+}
+
 export function stopGodsend(): void {
   if (!godsendProcess) return;
   appendAppEvent("BACKEND", "stop requested (kill)");
