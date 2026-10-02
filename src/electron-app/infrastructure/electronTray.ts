@@ -3,6 +3,7 @@ import fs from "fs";
 import { getIconCandidates } from "./fileSystem";
 
 export interface TrayOptions {
+  onPauseAllTorrents: () => void | Promise<void>;
   onQuit: () => void;
 }
 
@@ -35,6 +36,12 @@ export function createTray(mainWindow: BrowserWindow, { onQuit }: TrayOptions): 
           mainWindow.show();
           mainWindow.focus();
         }
+      },
+    },
+    {
+      label: "Pause All Torrents",
+      click: () => {
+        void onPauseAllTorrents();
       },
     },
     { label: "Quit", click: onQuit },
