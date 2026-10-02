@@ -101,6 +101,33 @@ func (s *Service) Pause(game string) error {
 	return nil
 }
 
+// PauseAllTorrents pauses only currently active aria2 torrent jobs.
+// GOD conversions are not affected because they do not register an aria2 control.
+func (s *Service) PauseAllTorrents() (int, error) {
+	s.controlMu.RLock()
+	games := make([]string, 0, len(s.controls))
+	for game := range s.controls {
+		games = append(games, game)
+	}
+	s.controlMu.RUnlock()
+
+	paused := 0
+	var firstErr error
+	for _, game := range games {
+		if err := s.Pause(game); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		paused++
+	}
+	if firstErr != nil {
+		return paused, firstErr
+	}
+	return paused, nil
+}
+
 func (s *Service) Resume(game string) error {
 	if err := s.aria2RPC(game, "aria2.unpauseAll"); err != nil { return err }
 	_ = os.Remove(s.pausedMarker(game))
