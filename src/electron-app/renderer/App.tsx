@@ -89,12 +89,27 @@ export default function App() {
 
   // ── Startup ───────────────────────────────────────────────────────────────
   useEffect(() => {
-    window.godsendApi.getOutputBuffer().then((buf: string[]) => setOutputLines(buf));
+    window.godsendApi.getOutputBuffer().then((buf: string[]) => setOutputLines(buf.slice(-1000)));
     window.godsendApi.getLogsInfo().then((info: any) => setLogInfo(info));
 
-    const cleanupOutput = window.godsendApi.onOutput((line: string) =>
-      setOutputLines((prev) => [...prev, line])
-    );
+    // Backend output can be very chatty during torrent downloads. Do not
+    // trigger a React render for every single log line; batch UI updates.
+    const pendingOutput: string[] = [];
+    let outputFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const flushOutput = () => {
+      outputFlushTimer = null;
+      if (pendingOutput.length === 0) return;
+      const batch = pendingOutput.splice(0, pendingOutput.length);
+      setOutputLines((prev) => [...prev, ...batch].slice(-1000));
+    };
+
+    const cleanupOutput = window.godsendApi.onOutput((line: string) => {
+      pendingOutput.push(line);
+      if (outputFlushTimer === null) {
+        outputFlushTimer = setTimeout(flushOutput, 100);
+      }
+    });
     const cleanupCover = window.godsendApi.onXboxCover(({ titleId, gameDataDir, src, dataUrl }: any) => {
       const key = gameDataDir || titleId;
       setCovers((prev) => ({ ...prev, [key]: src || dataUrl }));
@@ -117,6 +132,8 @@ export default function App() {
     }, 5000);
 
     return () => {
+      if (outputFlushTimer !== null) clearTimeout(outputFlushTimer);
+      flushOutput();
       cleanupOutput();
       cleanupCover();
       cleanupVisuals();
