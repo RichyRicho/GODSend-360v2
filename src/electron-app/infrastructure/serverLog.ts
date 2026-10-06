@@ -47,22 +47,45 @@ function ensureLogDir(): void {
   fs.mkdirSync(logsDirectory(), { recursive: true });
 }
 
-function appendLine(sourceTag: string, message: string): void {
+let pendingLogWrites: string[] = [];
+let logWriteTimer: ReturnType<typeof setTimeout> | null = null;
+let logWriteInProgress = false;
+
+function flushLogWrites(): void {
+  logWriteTimer = null;
+  if (logWriteInProgress || pendingLogWrites.length === 0) return;
+
+  const lines = pendingLogWrites.splice(0, pendingLogWrites.length);
+  logWriteInProgress = true;
   try {
     ensureLogDir();
-    const ts = new Date().toISOString();
-    const pid = process.pid;
-    const safe =
-      typeof message === "string"
-        ? message.replace(/\r?\n/g, "\\n ")
-        : String(message);
-    fs.appendFileSync(
-      currentLogFilePath(),
-      `${ts}\tpid=${pid}\t${sourceTag}\t${safe}\n`,
-      "utf8"
-    );
+    const file = currentLogFilePath();
+    fs.appendFile(file, lines.join(""), "utf8", (err) => {
+      logWriteInProgress = false;
+      if (err) console.error("serverLog.appendLine failed:", err.message);
+      if (pendingLogWrites.length > 0 && logWriteTimer === null) {
+        logWriteTimer = setTimeout(flushLogWrites, 50);
+      }
+    });
   } catch (err: any) {
+    logWriteInProgress = false;
     console.error("serverLog.appendLine failed:", err.message);
+  }
+}
+
+function appendLine(sourceTag: string, message: string): void {
+  const ts = new Date().toISOString();
+  const pid = process.pid;
+  const safe =
+    typeof message === "string"
+      ? message.replace(/\r?\n/g, "\\n ")
+      : String(message);
+  pendingLogWrites.push(`${ts}\tpid=${pid}\t${sourceTag}\t${safe}\n`);
+
+  if (pendingLogWrites.length >= 100) {
+    flushLogWrites();
+  } else if (logWriteTimer === null) {
+    logWriteTimer = setTimeout(flushLogWrites, 50);
   }
 }
 
